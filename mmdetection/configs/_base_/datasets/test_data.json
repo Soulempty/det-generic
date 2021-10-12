@@ -1,0 +1,66 @@
+{
+    "data": {
+        "samples_per_gpu": 1,
+        "workers_per_gpu": 2,
+        "test": {
+            "type": "TestDataset",
+            "data_root": "data",
+            "pipeline": [
+                {
+                    "type": "LoadImageFromImage"
+                },
+                {
+                    "type": "MultiScaleFlipAug",
+                    "img_scale": [
+                        1536,
+                        1280
+                    ],
+                    "flip": false,
+                    "transforms": [
+                        {
+                            "type": "RemoveBlur",
+                            "blur_score": 8
+                        },
+                        {
+                            "type": "Resize",
+                            "keep_ratio": true
+                        },
+                        {
+                            "type": "RandomFlip"
+                        },
+                        {
+                            "type": "Normalize",
+                            "mean": [
+                                123.675,
+                                116.28,
+                                103.53
+                            ],
+                            "std": [
+                                58.395,
+                                57.12,
+                                57.375
+                            ],
+                            "to_rgb": true
+                        },
+                        {
+                            "type": "Pad",
+                            "size_divisor": 32
+                        },
+                        {
+                            "type": "ImageToTensor",
+                            "keys": [
+                                "img"
+                            ]
+                        },
+                        {
+                            "type": "Collect",
+                            "keys": [
+                                "img"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

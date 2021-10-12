@@ -1,0 +1,200 @@
+{
+    "data": {
+        "samples_per_gpu": 2,
+        "workers_per_gpu": 2,
+        "data_path": "/data/detection/data/",
+        "img_type": "jpg",
+        "step_id": "13629",
+        "train": {
+            "type": "TrainDataset",
+            "ann_file": "trainval.txt",
+            "data_root": "/data/detection/data/13629/",
+            "img_prefix": "/data/detection/data/13629/",
+            "img_dir": "source",
+            "label_dir": "label",
+            "code_cls": [
+                "A1CFB",
+                "A1DPS",
+                "A2PPL",
+                "A3SMR",
+                "A3SPL",
+                "A3WSR",
+                "A3DMR_P",
+                "A3PMR_P",
+                "A3DMR",
+                "A3PMR",
+                "A3YFB",
+                "A3WFT",
+                "A3SSP",
+                "A3PPL",
+                "A3DBE",
+                "A1PPS",
+                "A3WTR",
+                "A2PMR",
+                "A3CIP",
+                "A3WOP",
+                "A3YIP",
+                "A3YIP_P",
+                "A3SIP",
+                "A3SIP_P",
+                "A3WBD",
+                "A3CFB",
+                "A3SFT",
+                "A0BID",
+                "A1PPL",
+                "A2DMR",
+                "other-1",
+                "other-2",
+                "other-3",
+                "other-4"
+            ],
+            "pipeline": [
+                {
+                    "type": "LoadImageFromFile"
+                },
+                {
+                    "type": "LoadAnnotations",
+                    "with_bbox": true
+                },
+                {
+                    "type": "Resize",
+                    "img_scale": [
+                        1536,
+                        1280
+                    ],
+                    "keep_ratio": true
+                },
+                {
+                    "type": "RandomFlip",
+                    "flip_ratio": 0.5
+                },
+                {
+                    "type": "Normalize",
+                    "mean": [
+                        123.675,
+                        116.28,
+                        103.53
+                    ],
+                    "std": [
+                        58.395,
+                        57.12,
+                        57.375
+                    ],
+                    "to_rgb": true
+                },
+                {
+                    "type": "Pad",
+                    "size_divisor": 32
+                },
+                {
+                    "type": "DefaultFormatBundle"
+                },
+                {
+                    "type": "Collect",
+                    "keys": [
+                        "img",
+                        "gt_bboxes",
+                        "gt_labels"
+                    ]
+                }
+            ]
+        },
+        "val": {
+            "type": "TrainDataset",
+            "ann_file": "val.txt",
+            "data_root": "/data/detection/data/13629/",
+            "img_prefix": "/data/detection/data/13629/",
+            "img_dir": "source",
+            "label_dir": "label",
+            "code_cls": [
+                "A1CFB",
+                "A1DPS",
+                "A2PPL",
+                "A3SMR",
+                "A3SPL",
+                "A3WSR",
+                "A3DMR_P",
+                "A3PMR_P",
+                "A3DMR",
+                "A3PMR",
+                "A3YFB",
+                "A3WFT",
+                "A3SSP",
+                "A3PPL",
+                "A3DBE",
+                "A1PPS",
+                "A3WTR",
+                "A2PMR",
+                "A3CIP",
+                "A3WOP",
+                "A3YIP",
+                "A3YIP_P",
+                "A3SIP",
+                "A3SIP_P",
+                "A3WBD",
+                "A3CFB",
+                "A3SFT",
+                "A0BID",
+                "A1PPL",
+                "A2DMR",
+                "other-1",
+                "other-2",
+                "other-3",
+                "other-4"
+            ],
+            "samples_per_gpu": 1,
+            "pipeline": [
+                {
+                    "type": "LoadImageFromFile"
+                },
+                {
+                    "type": "MultiScaleFlipAug",
+                    "img_scale": [
+                        1536,
+                        1280
+                    ],
+                    "flip": false,
+                    "transforms": [
+                        {
+                            "type": "Resize",
+                            "keep_ratio": true
+                        },
+                        {
+                            "type": "RandomFlip"
+                        },
+                        {
+                            "type": "Normalize",
+                            "mean": [
+                                123.675,
+                                116.28,
+                                103.53
+                            ],
+                            "std": [
+                                58.395,
+                                57.12,
+                                57.375
+                            ],
+                            "to_rgb": true
+                        },
+                        {
+                            "type": "Pad",
+                            "size_divisor": 32
+                        },
+                        {
+                            "type": "ImageToTensor",
+                            "keys": [
+                                "img"
+                            ]
+                        },
+                        {
+                            "type": "Collect",
+                            "keys": [
+                                "img"
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+}

@@ -51,11 +51,7 @@ class BaseRunner(metaclass=ABCMeta):
                  optimizer=None,
                  work_dir=None,
                  logger=None,
-                 meta=None,
-                 task_flag=None,
-                 stop_flag=None,
-                 call_back=None,
-                 update_model_path=None):
+                 meta=None):
         if batch_processor is not None:
             if not callable(batch_processor):
                 raise TypeError('batch_processor must be callable, '
@@ -102,10 +98,6 @@ class BaseRunner(metaclass=ABCMeta):
         self.optimizer = optimizer
         self.logger = logger
         self.meta = meta
-        self.task_flag = task_flag
-        self.call_back = call_back
-        self.stop_flag = stop_flag
-        self.update_model_path = update_model_path
 
         # create work_dir
         if mmcv.is_str(work_dir):

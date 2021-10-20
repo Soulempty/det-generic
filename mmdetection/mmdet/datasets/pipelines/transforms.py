@@ -66,13 +66,15 @@ def gridImg(img_tensor,h_num=11,w_num=7):
 
 @PIPELINES.register_module()
 class BlurIdentification(object):
-    def __init__(self,vmean_thr=1.0,vvar_thr=0.116,r=11,c=7):
-        self.vmean_thr = vmean_thr
-        self.vvar_thr = vvar_thr
-        self.row = r
-        self.col = c
-
+    def __init__(self,flag=True,grid_row=11,grid_col=7):
+        self.row = grid_row
+        self.col = grid_col
+        self.flag = flag
     def __call__(self, results):
+        if not self.flag:
+            results['blr_vvar'] = 0
+            results['blr_vmean'] = 0
+            return results
         image = results['img']
         h,w = image.shape[:2]
         tensor = torch.from_numpy(image).cuda().float()  
@@ -89,17 +91,15 @@ class BlurIdentification(object):
         mean_max = ((var-var.mean())**2)[-10:].mean().cpu().numpy()
         value = var[:50].mean().cpu().numpy()
         
-        results['blur_diff'] = mean_max
-        results['blur_value'] = value
-        results['blur'] = False
-        if value<self.vmean_thr and mean_max<self.vvar_thr:
-            results['blur'] = True
+        results['blr_vvar'] = mean_max   
+        results['blr_vmean'] = value
+
         return results
 
     def __repr__(self):
         repr_str = self.__class__.__name__
-        repr_str += f'(vmean_thr={self.vmean_thr},'
-        repr_str += f'vmean_thr={self.vmean_thr})'
+        repr_str += f'(grid_row={self.row},'
+        repr_str += f'grid_col={self.col})'
         return repr_str
 
 

@@ -24,15 +24,6 @@ DataCfgPath = os.path.join(root_dir,"configs/_base_/datasets/test_data.json")
 ModelCfgPath = os.path.join(root_dir,"configs/_base_/models/model.json")
 TestCfgPath = os.path.join(root_dir,"configs/_base_/cfgs/test_cfg.json")
 
-DefaultADCParameter = mmcv.Config.fromfile(os.path.join(root_dir,"configs/_base_/cfgs/DefaultADCParameter.json"))
-DefaultGrade = DefaultADCParameter.get("DefaultGrade",None)  
-BlurThreshold = DefaultADCParameter.get("BlurThreshold",None) 
-NewCodePath = os.path.join(root_dir,"configs/_base_/cfgs/NewCodes.json")
-Newcodes = mmcv.Config.fromfile(NewCodePath)
-CodeWithoutBlur = ['DMR','PMR','PPS','DPS']
-NFDScore = {"22129":0.008,"22229":0.0035,"22329":0.003,"22429":0.003}
-
-
 def async_(f):
   def wrapper(*args, **kwargs):
     thr = Thread(target=f, args=args, kwargs=kwargs)
@@ -333,42 +324,62 @@ def gen_voc(parse_info,save_path,file_name):
         bndbox.appendChild(score)
         object.appendChild(bndbox)
         annotation.appendChild(object)
-    with open(osp.join(save_path,file_name.replace(self.img_type,'xml')), 'w') as x:
+    with open(osp.join(save_path,os.path.splitext(file_name)[0]+".xml"), 'w') as x:
         x.write(doc.toprettyxml())
     x.close()
 
 
-def data_split(data_path,lb_dir,img_dir,r=0.9):
-    img_path = os.path.join(data_path,img_dir)
-    files = os.listdir(img_path)
-
-    train_txt = open(os.path.join(data_path,"trainval.txt"),'w')
-    val_txt = open(os.path.join(data_path,"val.txt"),'w')
-    train_ls = []
-    test_ls = []
+def data_split(data_path,lb_dir,img_dir,r=0.8):
     t1 = os.path.join(data_path,"train.txt")
     t2 = os.path.join(data_path,"test.txt")
-    if os.path.exists(t1):
-        train_ls = [line.strip() for line in open(t1,'r').readlines()]
-    if os.path.exists(t2):
-        test_ls = [line.strip() for line in open(t2,'r').readlines()]
 
-    tmp_img = []
+    train_path = os.path.join(data_path,"trainval.txt")
+    test_path = os.path.join(data_path,"val.txt")
+    if os.path.exists(t1) and os.path.exists(t2):
+        shutil.copy(t1,train_path)
+        shutil.copy(t2,test_path)
+        return 0
+    train_txt = open(train_path,'w')
+    val_txt = open(test_path,'w')
+    
     tbs = {}
+    tmp_img = []
+
+    img_path = os.path.join(data_path,img_dir)
+    files = os.listdir(img_path)
+    
     for f in files:
         xml_path = os.path.join(data_path,lb_dir,os.path.splitext(f)[0]+'.xml')
-        if os.path.exists(xml_path) and (f not in train_ls) and (f not in test_ls):
+        if os.path.exists(xml_path):
             tree = ET.parse(xml_path)
             root = tree.getroot()
             objs = root.findall('object')
+            code = ""
+            flag = True
+            anomaly = False
             if len(objs) > 0:
-                name = objs[0].find('name').text
-                if name not in tbs:
-                    tbs[name] = [f]
-                else:
-                    tbs[name].append(f)
+                for obj in objs:
+                    name = obj.find('name').text
+                    bnd_box = obj.find('bndbox')
+                    if flag:
+                        code = name
+                        flag = False
+
+                    box = [bnd_box.find('xmin').text,
+                           bnd_box.find('ymin').text,
+                           bnd_box.find('xmax').text,
+                           bnd_box.find('ymax').text]
+                    if "NaN" in box or float(box[0])<0 or float(box[1])<0 or float(box[2])<0 or float(box[3])<0:
+                        anomaly = True
+                if not anomaly:
+                    if code not in tbs:
+                        tbs[code] = [f]
+                    else:
+                        tbs[code].append(f)            
             else:
                 tmp_img.append(f)
+        else:
+            tmp_img.append(f)
     
     for code in tbs:
         imgs = tbs[code]
@@ -380,12 +391,10 @@ def data_split(data_path,lb_dir,img_dir,r=0.9):
             if i <=nn:
                 train_txt.write(x+"\n")
             else:
-                if len(code)>4:
-                    val_txt.write(x+"\n")
-    for x in tmp_img+train_ls:
+                val_txt.write(x+"\n")
+    
+    for x in tmp_img:
         train_txt.write(x+"\n")
-    for x in test_ls:
-        val_txt.write(x+"\n")
     train_txt.close()
     val_txt.close()
 
@@ -399,19 +408,11 @@ def get_train_cls(data_path,lb_dir):
         xml_p = os.path.join(xml_path,f)
         tree = ET.parse(xml_p)
         root = tree.getroot()
-        for obj in root.findall('object'):
-            txt = obj.find('name').text
-            name = txt.split('_')[0]
-
-            if obj.find('grade') != None:
-                grade = obj.find('grade').text  
-                if grade in ['P','N','S']:
-                    name = name + "_"+ grade
-            else:  
-                sp = txt.split('_')   
-                if len(sp) == 2 and sp[1] in ['P',]:
-                    name = txt
-            names[name] = names.get(name,0)+1
+        objs = root.findall('object')
+        if len(objs) >0 :
+            for obj in objs:
+                name = obj.find('name').text
+                names[name] = names.get(name,0)+1
     for k in names:
         if names[k] > 15:
             train_cls.append(k)

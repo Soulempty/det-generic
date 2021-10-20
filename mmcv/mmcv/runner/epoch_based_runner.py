@@ -1,5 +1,5 @@
 # Copyright (c) Open-MMLab. All rights reserved.
-import os.path as osp
+import os
 import time
 import warnings
 
@@ -9,7 +9,6 @@ import mmcv
 from .base_runner import BaseRunner
 from .checkpoint import save_checkpoint
 from .utils import get_host_info
-import logging
 
 class EpochBasedRunner(BaseRunner):
     """Epoch-based Runner.
@@ -24,14 +23,11 @@ class EpochBasedRunner(BaseRunner):
         self.data_loader = data_loader
         self._max_iters = self._max_epochs * len(data_loader)
         self.call_hook('before_train_epoch')
-        self.logger.info("before_train_epoch!\n")
+        self.logger.info("before_train_epoch!")
         time.sleep(2)  # Prevent possible deadlock during epoch transition
         anomaly_num = 0
         for i, data_batch in enumerate(data_loader):
             self._inner_iter = i
-            if self.stop_flag():
-                self.logger.info("training shall be stopped by people!\n")
-                return -2
             self.call_hook('before_train_iter')
             if self.batch_processor is None:
                 outputs = self.model.train_step(data_batch, self.optimizer,
@@ -51,10 +47,6 @@ class EpochBasedRunner(BaseRunner):
             if torch.isnan(total_loss):
                 anomaly_num += 1
                 if anomaly_num > 10:
-                    if self.call_back:
-                        self.update_model_path(self.epoch)
-                        rt_dict = {self.task_flag:-1}
-                        self.call_back(rt_dict)
                     self.logger.info(f"Loss anomaly,NaN loss occur,and the loss is {total_loss}")
                     time.spleep(5)
                     self.logger.info("training shall be stopped by loss anomaly!\n")
@@ -62,20 +54,11 @@ class EpochBasedRunner(BaseRunner):
 
             self.call_hook('after_train_iter')
             self._iter += 1
-            
-            if self.call_back:
-                self.update_model_path(self.epoch)
-                rt_dict = {self.task_flag:self.iter}
-                self.call_back(rt_dict)
 
         self.call_hook('after_train_epoch')
         self.logger.info("after_train_epoch!\n")
         self._epoch += 1
-        if self.epoch == self.max_epochs:
-            if self.call_back:
-                self.update_model_path(self.epoch)
-                rt_dict = {self.task_flag:self.iter+1}
-                self.call_back(rt_dict)
+        
         return -1
 
     def val(self, data_loader, **kwargs):
@@ -189,15 +172,15 @@ class EpochBasedRunner(BaseRunner):
             meta = dict(epoch=self.epoch + 1, iter=self.iter)
         else:
             meta.update(epoch=self.epoch + 1, iter=self.iter)
-        filename_tmpl = 'model_'+self.task_flag+"_{}.pth"
+        filename_tmpl = 'epoch_{}.pth'
         filename = filename_tmpl.format(self.epoch + 1)
-        filepath = osp.join(out_dir, filename)
+        filepath = os.path.join(out_dir, filename)
         optimizer = self.optimizer if save_optimizer else None
         save_checkpoint(self.model, filepath, optimizer=optimizer, meta=meta)
         # in some environments, `os.symlink` is not supported, you may need to
         # set `create_symlink` to False
         if create_symlink:
-            mmcv.symlink(filename, osp.join(out_dir, 'latest.pth'))
+            mmcv.symlink(filename, os.path.join(out_dir, 'latest.pth'))
 
 
 class Runner(EpochBasedRunner):

@@ -21,7 +21,7 @@ from mmdet.models import build_detector
 from mmdet.utils import collect_env, get_root_logger
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmdet.core import DistEvalHook, EvalHook, Fp16OptimizerHook
-from mmcv.runner import (DistSamplerSeedHook, EpochBasedRunner, OptimizerHook, build_optimizer, init_dist)
+from mmcv.runner import DistSamplerSeedHook, EpochBasedRunner, OptimizerHook, build_optimizer, init_dist
 
 root_dir = os.path.join(os.path.dirname(__file__),"../..")
 data_cfg_path = os.path.join(root_dir,"configs/_base_/datasets/train_data.json")
@@ -48,19 +48,17 @@ class TrainInfo():
             self.runtime_cfg.dump(runtime_cfg_path)
         return 0
 
-
-    def set_param(self,data_dir,step_id,train_cls=None,max_epochs=25,batchsize=2,learning_rate=0.016,work_dir=None,img_dir='source',label_dir='label'):
+    def set_param(self,data_dir,train_cls=None,img_size=None,max_epochs=25,batchsize=2,learning_rate=0.01,work_dir=None,img_dir='source',label_dir='label'):
         if batchsize:
             self.data_cfg['data']['samples_per_gpu'] = batchsize
-        if os.path.isabs(data_dir):
-            self.data_cfg['data']['train']['data_root'] = data_dir+'/'
-        else:
-            self.data_cfg['data']['train']['data_root'] = os.path.join(self.data_cfg['data']['data_path'],data_dir)+'/'
-        self.data_path = self.data_cfg['data']['train']['data_root']
+        data_dir = os.path.abspath(data_dir)
+        assert os.path.exists(data_dir) == True, "You should give a right path dir to the data you are to train!"
+        self.data_path = data_dir+'/'
+        self.data_cfg['data']['train']['data_root'] = self.data_path
+ 
         self.data_cfg['data']['train']['img_prefix'] = self.data_path
         self.data_cfg['data']['val']['data_root'] = self.data_path
         self.data_cfg['data']['val']['img_prefix'] = self.data_path
-        self.data_cfg['data']['step_id'] = step_id
 
         train_codes = self.split_data(label_dir,img_dir)
         if train_cls:
@@ -84,20 +82,15 @@ class TrainInfo():
             self.data_cfg['data']['train']['img_dir'] = img_dir
         if label_dir:
             self.data_cfg['data']['train']['label_dir'] = label_dir
+        if img_size:
+            self.data_cfg["data"]["train"]["pipeline"][2]["img_scale"] = img_size # w,h
+            self.data_cfg["data"]["val"]["pipeline"][1]["img_scale"] = img_size
         self.data_cfg.dump(data_cfg_path)
         self.model_cfg.dump(model_cfg_path)
         self.runtime_cfg.dump(runtime_cfg_path)
 
-
-
-# gpu_id
-# resume: 
-# load:        
-# validate
-# distributed
-
 class Detection():
-    def __init__(self,gpu_id=0,validate=False,distributed=False,resume_from=None,load_from=None,test_score=0.2):
+    def __init__(self,gpu_id=0,validate=True,distributed=False,resume_from=None,load_from=None,test_score=0.2):
         super().__init__()
         self.data_cfg = mmcv.Config.fromfile(data_cfg_path)
         self.model_cfg = mmcv.Config.fromfile(model_cfg_path)
@@ -114,17 +107,10 @@ class Detection():
         self.meta = dict()
         self.model = None
         self.optimizer = None
-        self._max_iters = 0
-        self._max_epochs = self.runtime_cfg.runtime_cfg.total_epochs
-        self._data_path = self.data_cfg['data']['train']['data_root']
-        self._stop_flag = False
-        self._model_path = None
-        self._task_flag = self.data_path.split('/')[-2] if self.data_path.split('/')[-1]=='' else self.data_path.split('/')[-1]
-
+        self.data_path = self.data_cfg['data']['train']['data_root']
         self.model_init_flag = False
         self.data_init_flag = False
         
-
         self.work_dir = os.path.abspath(self.runtime_cfg.runtime_cfg.work_dir)
         mmcv.mkdir_or_exist(self.work_dir)
 
@@ -132,7 +118,6 @@ class Detection():
         log_file = os.path.join(self.work_dir, f'{self.timestamp}.log')
         self.dash_line = '-' * 60 + '\n'
         self.logger = get_root_logger(log_file=log_file, log_level=self.runtime_cfg.runtime_cfg.log_level)
-        self.logger.info("Adc Trainer Info:\n")
 
         self.data_cfg.dump(os.path.join(self.work_dir, os.path.basename(data_cfg_path)))
         self.model_cfg.dump(os.path.join(self.work_dir, os.path.basename(model_cfg_path)))
@@ -144,29 +129,6 @@ class Detection():
         self.meta['env_info'] = env_info
         self.data_loaders = None
         self.init_dataset()
-        
-    @property
-    def max_epochs(self):
-        return self._max_epochs
-
-    @property
-    def task_flag(self):
-        return self._task_flag
-
-    @property
-    def model_path(self):
-        return self._model_path
-
-    def update_model_path(self,epoch_):
-        filename_tmpl = 'model_'+self.task_flag+"_{}.pth"
-        self._model_path = os.path.join(self.data_path,'model',filename_tmpl.format(epoch_))  
-    @property
-    def data_path(self):
-        return self._data_path
-
-    @property
-    def max_iters(self):
-        return self._max_iters
     
     def release(self):
         if self.model_init_flag:
@@ -190,9 +152,9 @@ class Detection():
             else:
                 self.model = MMDistributedDataParallel(model.cuda(),device_ids=[torch.cuda.current_device()],broadcast_buffers=False,find_unused_parameters=False)
             self.optimizer = build_optimizer(self.model, self.runtime_cfg.runtime_cfg.optimizer)
-            self.logger.info("build detector and optimizer successfully!\n")
+            self.logger.info("build detector and optimizer successfully!")
         except Exception as e:
-            self.logger.error("build detector and optimizer failed!\n")
+            self.logger.error("build detector and optimizer failed!")
         self.model_init_flag = True
 
     def init_dataset(self):
@@ -206,34 +168,25 @@ class Detection():
                     len(self.gpu_ids),
                     dist=self.distributed,
                     seed=None) for ds in datasets]
-            self.logger.info("train dataloader loading successfully!\n")
+            self.logger.info("train dataloader loading successfully!")
         except Exception as e:
-            self.logger.error("train dataloader loading failed!\n")
+            self.logger.error("train dataloader loading failed!")
 
-        self._max_iters = self._max_epochs * len(data_loaders[0])
         self.runtime_cfg.runtime_cfg.lr_config.warmup_iters = len(data_loaders[0])*2
-        # add some important info to meta of model tobe saved.
+        # add some important info to meta of model to be saved.
         if self.runtime_cfg.runtime_cfg.checkpoint_config is not None:
             self.runtime_cfg.runtime_cfg.checkpoint_config.meta = dict(
                 mmdet_version=__version__,
-                CLASSES=self.train_cls,
-                step_id=self.data_cfg.data.step_id)
+                CLASSES=self.train_cls)
         self.data_loaders = data_loaders
         self.data_init_flag = True
     
-    def stop(self):
-        self._stop_flag = True
-    
-    def stop_flag(self):
-        return self._stop_flag
-    
-    @async_
-    def train(self,call_back=None):
+
+    def train(self):
         self.logger.info('Environment info:\n' + self.dash_line + self.meta['env_info'] + '\n' + self.dash_line) 
 
         if self.distributed:
             init_dist('pytorch', **self.runtime_cfg.runtime_cfg.dist_params)
-        #datasets, data_loaders = self.init_dataset()
         self.init_model()
         
         runner = EpochBasedRunner(
@@ -241,11 +194,7 @@ class Detection():
             optimizer=self.optimizer,
             work_dir=self.work_dir,
             logger=self.logger,
-            meta=self.meta,
-            task_flag=self.task_flag,
-            stop_flag=self.stop_flag,
-            call_back=call_back,
-            update_model_path=self.update_model_path
+            meta=self.meta
             )
         runner.timestamp = self.timestamp
         # fp16 setting
@@ -259,9 +208,9 @@ class Detection():
                                            self.runtime_cfg.runtime_cfg.checkpoint_config, 
                                            self.runtime_cfg.runtime_cfg.log_config,
                                            None)
-            self.logger.info("register training hooks successfully!\n")
+            self.logger.info("register training hooks successfully!")
         except Exception as e:
-            self.logger.error("register training hooks failed!\n")
+            self.logger.error("register training hooks failed!")
 
         if self.validate:
             samples_per_gpu = self.data_cfg.data.val.pop('samples_per_gpu', 1)
@@ -276,9 +225,9 @@ class Detection():
                     workers_per_gpu=self.data_cfg.data.workers_per_gpu,
                     dist=self.distributed,
                     shuffle=False)
-                self.logger.info("test dataloader loading successfully!\n")
+                self.logger.info("test dataloader loading successfully!")
             except Exception as e:
-                self.logger.error("test dataloader loading failed!\n")
+                self.logger.error("test dataloader loading failed!")
 
             eval_cfg = self.runtime_cfg.runtime_cfg.get('evaluation', {})
             eval_hook = DistEvalHook if self.distributed else EvalHook

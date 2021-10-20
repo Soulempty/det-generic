@@ -18,8 +18,10 @@
                     "flip": false,
                     "transforms": [
                         {
-                            "type": "RemoveBlur",
-                            "blur_score": 8
+                            "type": "BlurIdentification",
+                            "flag": true,
+                            "grid_row": 7,
+                            "grid_col": 11
                         },
                         {
                             "type": "Resize",

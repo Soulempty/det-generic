@@ -3,6 +3,7 @@
         "samples_per_gpu": 2,
         "workers_per_gpu": 2,
         "data_path": "/data/detection/data/",
+        "log_path": "/data/detection/det-generic/MdetTrainLOG",
         "img_type": "jpg",
         "train": {
             "type": "TrainDataset",

@@ -9,7 +9,6 @@
             "type": "TrainDataset",
             "ann_file": "trainval.txt",
             "data_root": "/data/detection/data/13629/",
-            "img_prefix": "/data/detection/data/13629/",
             "img_dir": "source",
             "label_dir": "label",
             "code_cls": [],

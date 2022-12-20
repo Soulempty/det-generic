@@ -38,5 +38,4 @@ if __name__ == "__main__":
     data_dir = "data/wxn"
     img_size = [1560,1280]
     train_cls = [] #args.train_cls
-    train(data_dir,img_size) 
     train(args,data_dir,img_size,train_cls)  

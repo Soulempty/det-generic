@@ -4,4 +4,5 @@
 
 ## 环境构建
 
-`docker build -t detect:v1 .`
+-  下载当前代码库到服务器指定路径
+-  使用docker构建镜像，命令如下：`docker build -t detect:v1 .`

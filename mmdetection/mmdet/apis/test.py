@@ -21,7 +21,7 @@ from mmdet.datasets import build_dataloader, build_dataset
 from mmdet.models import build_detector
 
 from .utils import replace_ImageToTensor, nms
-from .utils import DataCfgPath, ModelCfgPath, TestCfgPath
+from .utils import TestDataCfgPath, ModelCfgPath, TestCfgPath
 
 
 class Detect(): # 
@@ -40,7 +40,7 @@ class Detect(): #
         self.list_flag = False
         self.model_init_flag = False
 
-        self.data_cfg = mmcv.Config.fromfile(DataCfgPath)
+        self.data_cfg = mmcv.Config.fromfile(TestDataCfgPath)
         self.model_cfg = mmcv.Config.fromfile(ModelCfgPath)
         self.test_cfg = mmcv.Config.fromfile(TestCfgPath)
         self.init_cfg()
@@ -55,7 +55,7 @@ class Detect(): #
         elif not os.path.exists(self.model_path):
             raise ValueError("The model path you give does not exist!")
         self.data_cfg["data"]["test"]["pipeline"][1]["transforms"][0]["flag"] = self.blr_det
-        self.data_cfg.dump(DataCfgPath)
+        self.data_cfg.dump(TestDataCfgPath)
 
     @property
     def test_code(self):
@@ -183,6 +183,7 @@ class Detect(): #
         prog_bar = mmcv.ProgressBar(len(dataset))
         infos = dataset.data_infos
         for i, data in enumerate(dataset_loader):
+            
             infos[i]['blr_vmean'] = data["img_metas"][0].data[0][0].get('blr_vmean',0) 
             infos[i]['blr_vvar'] = data["img_metas"][0].data[0][0].get('blr_vvar',0)
             with torch.no_grad():
@@ -194,7 +195,6 @@ class Detect(): #
         results = self.std_results(results,infos)
         del dataset
         del dataset_loader
-        gc.collect()
         return results
     
     def std_results(self, results, infos, ext_box=2,exist_score=0.002,blr_score=0.2):

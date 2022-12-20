@@ -16,6 +16,7 @@
 -  将数据放到工作路径下，如`cp -r /data/jiaochao/data/wxn /data/jiaochao/adc/det-generic/data`
 -  修改train.py文件末尾处的`data_dir="/data/detection/data/wxn"`,修改训练尺寸，如`img_size = [1560,1280]`
 -  在容器中，执行如下命令：`python train.py`
+-  在容器中，进行多卡训练：`CUDA_VISIBLE_DEVICES=0,1 python -m torch.distributed.launch --nproc_per_node=2 --master_port=29500 train.py  --distributed`
 
 ## 模型测试
 

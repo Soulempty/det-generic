@@ -18,18 +18,18 @@ RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build 
 
 RUN mkdir -p /data/detection
 WORKDIR /data/detection
-COPY . /data/detection
+#COPY . /data/detection
 
-RUN pip install pynvml terminaltables pycocotools pandas -i https://pypi.tuna.tsinghua.edu.cn/simple
+RUN pip install pynvml terminaltables pycocotools pandas opencv-python addict numpy pyyaml yapf -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-WORKDIR /data/detection/mmcv
-RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
+#WORKDIR /data/detection/mmcv
+#RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-WORKDIR  /data/detection/mmdetection
-RUN conda clean --all
-ENV FORCE_CUDA="1"
-RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
+#WORKDIR  /data/detection/mmdetection
+#RUN conda clean --all
+#ENV FORCE_CUDA="1"
+#RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
 
-WORKDIR /data/detection
+#WORKDIR /data/detection
 
 

@@ -9,7 +9,7 @@
 -  基于构建镜像，运行docker容器，命令如下：`sudo docker run --runtime=nvidia -it --ipc=host -v /data/jiaochao/adc/det-generic:/data/detection/ --name det-generic detect:v1 /bin/bash`
 -  编译mmcv: `cd mmcv && pip install -e .`
 -  编译mmdet: `cd mmdetection && pip install -e .`
--  docker容器环境构建完成。
+-  docker容器环境构建完成(编译失败时，可多次尝试)。
 
 ## 模型训练
 

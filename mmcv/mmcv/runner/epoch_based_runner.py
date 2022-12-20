@@ -30,8 +30,7 @@ class EpochBasedRunner(BaseRunner):
             self._inner_iter = i
             self.call_hook('before_train_iter')
             if self.batch_processor is None:
-                outputs = self.model.train_step(data_batch, self.optimizer,
-                                                **kwargs)
+                outputs = self.model.train_step(data_batch, self.optimizer,**kwargs)
             else:
                 outputs = self.batch_processor(
                     self.model, data_batch, train_mode=True, **kwargs)
@@ -42,15 +41,6 @@ class EpochBasedRunner(BaseRunner):
                 self.log_buffer.update(outputs['log_vars'],
                                        outputs['num_samples'])
             self.outputs = outputs
-
-            total_loss = outputs['loss']
-            if torch.isnan(total_loss):
-                anomaly_num += 1
-                if anomaly_num > 10:
-                    self.logger.info(f"Loss anomaly,NaN loss occur,and the loss is {total_loss}")
-                    time.spleep(5)
-                    self.logger.info("training shall be stopped by loss anomaly!\n")
-                    return -2 
 
             self.call_hook('after_train_iter')
             self._iter += 1
@@ -137,7 +127,7 @@ class EpochBasedRunner(BaseRunner):
                 for _ in range(epochs):
                     if mode == 'train' and self.epoch >= max_epochs:
                         return
-                    flag = epoch_runner(data_loaders[i], **kwargs)
+                    flag = epoch_runner(data_loaders[i],**kwargs)
                     if flag == -2:
                         break
             if flag == -2:

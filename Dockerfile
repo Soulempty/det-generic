@@ -21,12 +21,12 @@ WORKDIR /data/detection
 COPY . /data/detection
 
 WORKDIR /data/detection/mmcv
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 WORKDIR  /data/detection/mmdetection
 RUN conda clean --all
 ENV FORCE_CUDA="1"
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 WORKDIR /data/detection
 

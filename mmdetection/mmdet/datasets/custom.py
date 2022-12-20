@@ -23,17 +23,17 @@ class CustomDataset(Dataset):
                  test_mode=False,
                  filter_empty_gt=True,
                  save_path=None,
-                 img_prefix='',
                  seg_prefix=None,
                  proposal_file=None,
                  img_dir='source',
                  label_dir='label'):       
         self.data_root = data_root
+        
         self.ann_file = ann_file
         self.cls_file = cls_file
         self.img_path = img_path
         self.save_path = save_path
-        self.img_prefix = img_prefix
+        self.img_prefix = data_root
         self.xml_path = xml_path
         self.test_mode = test_mode
 
@@ -48,6 +48,7 @@ class CustomDataset(Dataset):
         # join paths if data_root is specified
         if self.data_root is not None:
             if not osp.isfile(self.ann_file):
+                #print(self.data_root, self.ann_file)
                 self.ann_file = osp.join(self.data_root, self.ann_file)
             if not self.seg_prefix:
                 self.seg_prefix = self.data_root
@@ -184,8 +185,8 @@ class CustomDataset(Dataset):
                  results,
                  metric='mAP',
                  logger=None,
-                 proposal_nums=(100, 300, 1000),
-                 iou_thr=0.3,
+                 proposal_nums=(1, 10, 100),
+                 iou_thr=0.5,
                  scale_ranges=None,
                  pt = 'std',
                  do_matrix=False):

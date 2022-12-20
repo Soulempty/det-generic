@@ -71,7 +71,7 @@ def test(data_path,model_path,gpu_id,save_path='save',score_thr=0.5):
 
 
 if __name__ == "__main__":
-    data_path = 'data/wxn/val.txt'  
+    data_path = 'data/wxn/val.txt'  #或者 'data/wxn/source'
     save_path = 'data/wxn/results'    
     model_path = "data/wxn/model/epoch_25.pth"
     gpu_id = 0

@@ -13,16 +13,93 @@ import copy
 import mmcv
 import torch
 import random
+import logging
 from xml.dom import minidom
 from threading import Thread
+
 import xml.etree.ElementTree as ET
 import torch.distributed as dist
 from mmcv.runner import get_dist_info
+from contextlib import contextmanager
 
+logger_initialized = {}
 root_dir = os.path.join(os.path.dirname(__file__),"../..")
-DataCfgPath = os.path.join(root_dir,"configs/_base_/datasets/test_data.json")
+TestDataCfgPath = os.path.join(root_dir,"configs/_base_/datasets/test_data.json")
+EvalDataCfgPath = os.path.join(root_dir,"configs/_base_/datasets/eval_data.json")
 ModelCfgPath = os.path.join(root_dir,"configs/_base_/models/model.json")
 TestCfgPath = os.path.join(root_dir,"configs/_base_/cfgs/test_cfg.json")
+
+
+@contextmanager
+def torch_distributed_zero_first(local_rank: int):
+    """
+    Decorator to make all processes in distributed training wait for each local_master to do something.
+    """
+    if local_rank not in [-1, 0]:
+        torch.distributed.barrier()
+    yield   
+    if local_rank == 0:
+        torch.distributed.barrier()
+
+
+def get_logger(name, log_file=None, log_level=logging.INFO):
+    """Initialize and get a logger by name.
+
+    If the logger has not been initialized, this method will initialize the
+    logger by adding one or two handlers, otherwise the initialized logger will
+    be directly returned. During initialization, a StreamHandler will always be
+    added. If `log_file` is specified and the process rank is 0, a FileHandler
+    will also be added.
+
+    Args:
+        name (str): Logger name.
+        log_file (str | None): The log filename. If specified, a FileHandler
+            will be added to the logger.
+        log_level (int): The logger level. Note that only the process of
+            rank 0 is affected, and other processes will set the level to
+            "Error" thus be silent most of the time.
+
+    Returns:
+        logging.Logger: The expected logger.
+    """
+    logger = logging.getLogger(name)
+    if name in logger_initialized:
+        return logger
+    # handle hierarchical names
+    # e.g., logger "a" is initialized, then logger "a.b" will skip the
+    # initialization since it is a child of "a".
+    for logger_name in logger_initialized:
+        if name.startswith(logger_name):
+            return logger
+
+    stream_handler = logging.StreamHandler()
+    handlers = [stream_handler]
+
+    if dist.is_available() and dist.is_initialized():
+        rank = dist.get_rank()
+    else:
+        rank = 0
+
+    # only rank 0 will add a FileHandler
+    if rank == 0 and log_file is not None:
+        file_handler = logging.FileHandler(log_file, 'w')
+        handlers.append(file_handler)
+
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    for handler in handlers:
+        handler.setFormatter(formatter)
+        handler.setLevel(log_level)
+        logger.addHandler(handler)
+
+    if rank == 0:
+        logger.setLevel(log_level)
+    else:
+        logger.setLevel(logging.ERROR)
+
+    logger_initialized[name] = True
+
+    return logger
 
 def async_(f):
   def wrapper(*args, **kwargs):
@@ -192,7 +269,7 @@ def dict2obj(dict_item):
 
 
 #自定义类间nms边界框去重函数         
-def nms(boxes, threshold=0.3):
+def nms(boxes, threshold=0.05):
     """Performs non-maximum supression and returns indicies of kept boxes.
     boxes: [N, (x1, y1, x2, y2, score)]. Notice that (y2, x2) lays outside the box.
     scores: 1-D array of box scores.
@@ -329,27 +406,28 @@ def gen_voc(parse_info,save_path,file_name):
     x.close()
 
 
-def data_split(data_path,lb_dir,img_dir,r=0.8):
-    t1 = os.path.join(data_path,"train.txt")
-    t2 = os.path.join(data_path,"test.txt")
+def data_split(data_path,lb_dir,img_dir,codes=[],r=0.8):
 
     train_path = os.path.join(data_path,"trainval.txt")
-    test_path = os.path.join(data_path,"val.txt")
-    if os.path.exists(t1) and os.path.exists(t2):
-        shutil.copy(t1,train_path)
-        shutil.copy(t2,test_path)
-        return 0
+    val_path = os.path.join(data_path,"val.txt")
+    test_path = os.path.join(data_path,"test.txt")
+
     train_txt = open(train_path,'w')
-    val_txt = open(test_path,'w')
-    
+    test_txt = open(test_path,'w')
+    val_txt = open(val_path,'w')
+
     tbs = {}
     tmp_img = []
 
     img_path = os.path.join(data_path,img_dir)
     files = os.listdir(img_path)
+
+    t = os.path.join(data_path,'train.txt')
+    if os.path.exists(t):
+        files = [line.strip() for line in open(t).readlines()]
     
     for f in files:
-        xml_path = os.path.join(data_path,lb_dir,os.path.splitext(f)[0]+'.xml')
+        xml_path = os.path.join(data_path,lb_dir,f[:-4]+'.xml')
         if os.path.exists(xml_path):
             tree = ET.parse(xml_path)
             root = tree.getroot()
@@ -384,22 +462,30 @@ def data_split(data_path,lb_dir,img_dir,r=0.8):
     for code in tbs:
         imgs = tbs[code]
         random.shuffle(imgs)
-        nn = int(len(imgs)*r-0.5)
+        if len(codes)>=1 and code not in codes:
+            for x in imgs:
+                test_txt.write(x+'\n')
+            continue
+
+        m = len(imgs)
+        nn = int(m*r+0.5)
         i = 0
         for x in imgs:
             i += 1
             if i <=nn:
-                train_txt.write(x+"\n")
+                train_txt.write(x+'\n')
             else:
-                val_txt.write(x+"\n")
+                val_txt.write(x+'\n')
     
     for x in tmp_img:
         train_txt.write(x+"\n")
     train_txt.close()
+    test_txt.close()
     val_txt.close()
 
     
-def get_train_cls(data_path,lb_dir):
+def get_train_cls(data_path,lb_dir='label'):
+
     xml_path = os.path.join(data_path,lb_dir)
     files = os.listdir(xml_path)
     train_cls = []
@@ -414,6 +500,7 @@ def get_train_cls(data_path,lb_dir):
                 name = obj.find('name').text
                 names[name] = names.get(name,0)+1
     for k in names:
-        if names[k] > 15:
+        if names[k] > 5:
             train_cls.append(k)
+    print(train_cls)
     return train_cls

@@ -12,13 +12,15 @@ ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
 RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub
 RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/machine-learning/repos/ubuntu1804/x86_64/7fa2af80.pub
 
-RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build libglib2.0-0 libsm6 libxrender-dev libxext6 \
+RUN apt-get update && apt-get install -y ffmpeg libsm6 libxext6 git ninja-build libglib2.0-0 libsm6 libxrender-dev libxext6 vim \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /data/detection
 WORKDIR /data/detection
 COPY . /data/detection
+
+RUN pip install pynvml terminaltables pycocotools pandas -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 WORKDIR /data/detection/mmcv
 RUN pip install --no-cache-dir -e . -i https://pypi.tuna.tsinghua.edu.cn/simple

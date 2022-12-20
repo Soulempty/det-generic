@@ -1,14 +1,11 @@
 #coding:utf-8
-
-import os.path as osp
-import xml.etree.ElementTree as ET
 import os
-from mmdet.core import eval_map, eval_recalls, confusion_matrix
-
 import mmcv
 import numpy as np
 from PIL import Image
 import pandas as pd
+import xml.etree.ElementTree as ET
+from mmdet.core import eval_map, eval_recalls, confusion_matrix
 
 from .custom import CustomDataset
 from .builder import DATASETS
@@ -35,12 +32,12 @@ class TrainDataset(CustomDataset):
             df = pd.read_csv(self.cls_file)
             name_cls = df.set_index(['filename'])['code'].to_dict()
             cls_flag = True
-        if self.img_path and osp.isdir(self.img_path):
+        if self.img_path and os.path.isdir(self.img_path):
             self.img_prefix = ""
             fs = os.listdir(self.img_path)
             for f in fs:
                 width,height = 0,0
-                filename = osp.join(self.img_path,f)
+                filename = os.path.join(self.img_path,f)
                 try:
                     img = Image.open(filename)
                 except Exception as e:
@@ -67,11 +64,12 @@ class TrainDataset(CustomDataset):
                     cls_ = ''
                 data_infos.append(dict(id=basename.split('.')[0], cls_label=cls_, filename=filename, width=width, height=height))
         else:
-            img_ids = mmcv.list_from_file(ann_file)
-            for img_id in img_ids:
+            items = mmcv.list_from_file(ann_file)
+            for item in items:
                 width,height = 0,0
-                filename = '{}/{}'.format(self.img_dir,img_id)
-                img_path = osp.join(self.img_prefix, filename)
+                filename = '{}/{}'.format(self.img_dir,item)
+                img_path = os.path.join(self.img_prefix, filename)
+                img_id = item[:-4]
                 try:
                     img = Image.open(img_path)
                 except Exception as e:
@@ -79,7 +77,7 @@ class TrainDataset(CustomDataset):
                     continue
                 width, height = img.size  
                 if cls_flag:
-                    cls_ = name_cls[img_id+'.'+self.img_type]
+                    cls_ = name_cls[item]
                 else:
                     cls_ = ''
                 data_infos.append(dict(id=img_id, cls_label=cls_, filename=filename, width=width, height=height))
@@ -91,7 +89,7 @@ class TrainDataset(CustomDataset):
         subset_data_infos = []
         for data_info in self.data_infos:
             img_id = data_info['id']
-            xml_path = osp.join(self.img_prefix, 'label',
+            xml_path = os.path.join(self.img_prefix, 'label',
                                 '{}.xml'.format(img_id))
             tree = ET.parse(xml_path)
             root = tree.getroot()
@@ -104,14 +102,15 @@ class TrainDataset(CustomDataset):
         return subset_data_infos
         
     def get_ann_info(self, idx):
-        img_id = osp.splitext(self.data_infos[idx]['id'])[0]
-        xml_path = osp.join(self.img_prefix, self.label_dir,'{}.xml'.format(img_id))
+        img_id = self.data_infos[idx]['id']
+        xml_path = os.path.abspath(os.path.join(self.img_prefix, self.label_dir,'{}.xml'.format(img_id)))
         bboxes = []
         labels = []
         bboxes_ignore = []
         labels_ignore = []
 
-        if not osp.exists(xml_path):
+        if not os.path.exists(xml_path):
+            
             bboxes = np.zeros((0, 4))
             labels = np.zeros((0, ))
             bboxes_ignore = np.zeros((0, 4))
@@ -122,6 +121,7 @@ class TrainDataset(CustomDataset):
 
             for obj in root.findall('object'):
                 name = obj.find('name').text
+
                 if name not in self.CLASSES:
                     continue
                 label = self.cat2label[name]
@@ -133,6 +133,7 @@ class TrainDataset(CustomDataset):
                 int(float(bnd_box.find('xmax').text)),
                 int(float(bnd_box.find('ymax').text))
                 ]
+    
                 ignore = False
                 if self.min_size:
                     assert not self.test_mode
@@ -164,78 +165,6 @@ class TrainDataset(CustomDataset):
             bboxes_ignore=bboxes_ignore.astype(np.float32),
             labels_ignore=labels_ignore.astype(np.int64))
         return ann
-
-    def eval_cls(self,results,score_thr=0.2):
-        infos = self.data_infos      
-        cls_name = self.CLASSES
-        cls_id = {cls:i for i,cls in enumerate(cls_name+('unknow',))}
-        n_ = len(cls_name)
-        gt_ids = {i:0 for i in range(n_)}
-        matrix_ = np.zeros((n_+1,n_),dtype=np.int32)
-        print_flag = True
-        for i, (res,info) in enumerate(zip(results,infos)):
-            if info["cls_label"] == '':
-                ann = self.get_ann_info(i)
-                labels = ann["labels"]
-                st_cls = dict(Counter(labels))
-                if len(st_cls) == 1:
-                    gt_id = list(st_cls.keys())[0]
-                elif len(st_cls)>= 2:
-                    gt_id = min(list(st_cls.keys()))
-                else:
-                    continue
-                if print_flag:
-                    print("Image code is automatically generated according to the bboxes labeled.")
-                    print_flag = False
-            else:
-                gt_id = cls_id[info["cls_label"]]
-                if print_flag:
-                    print("Image code is import from the csv file with path %s." % self.cls_file)
-                    print_flag = False
-            gt_ids[gt_id] += 1
-            bboxes = np.vstack(res)
-            labels = [np.full(bbox.shape[0], i, dtype=np.int32) for i, bbox in enumerate(res)]
-            labels = np.concatenate(labels)         
-            if len(bboxes)==0:
-                matrix_[n_,gt_id] += 1
-                continue
-            scores = bboxes[:, -1]
-            inds = scores >= np.max(scores) - 1e-5
-            bboxes = bboxes[inds, :]
-            labels = labels[inds]
-            #do nms, time-consuming 
-            inds = self.nms(bboxes)
-            bboxes = bboxes[inds, :]
-            labels = labels[inds]
-
-            cls_nums = dict(Counter(labels))
-            p_id = None
-            if len(cls_nums) == 1:
-                p_id = list(cls_nums.keys())[0]
-            elif len(cls_nums)>= 2:
-                p_id = min(list(cls_nums.keys()))
-            else:
-                p_id = n_
-            matrix_[p_id,gt_id] += 1
-        rcs = []
-        acs = []
-        for i in range(n_):
-            rcs.append(round(matrix_[i,i]/(gt_ids[i]+1e-6),2))
-            acs.append(round(matrix_[i,i]/(matrix_[i,:].sum()+1e-6),2))
-        for i in range(n_):
-            print("{}\trecall:{}\taccuracy:{}".format(cls_name[i],rcs[i],acs[i]))
-        print("Avg Recall:{}\tAvg Acc:{}".format(sum(rcs)/n_,sum(acs)/n_))
-        header = ['Dets|Gts',]+list(cls_name)+["unknow",]
-        
-        table_data = [header]
-        for i in range(n_+1):
-            row_data = [header[1:][i]]
-            for j in range(n_):
-                row_data.append(matrix_[i,j])
-            table_data.append(row_data)
-        table = AsciiTable(table_data)
-        print("\n---------------Confusion Matrix of images code.-------------")
-        print(table.table)
 
     def gen_voc(self,parse_info,save_path,file_name):
     
@@ -313,7 +242,7 @@ class TrainDataset(CustomDataset):
             bndbox.appendChild(score)
             object.appendChild(bndbox)
             annotation.appendChild(object)
-        with open(osp.join(save_path,file_name.replace(os.path.splitext(file_name)[-1],'.xml')), 'w') as x:
+        with open(os.path.join(save_path,file_name.replace(os.path.splitext(file_name)[-1],'.xml')), 'w') as x:
             x.write(doc.toprettyxml())
         x.close()   
                          
